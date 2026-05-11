@@ -24,3 +24,11 @@ jobs:
           SCRAPER_API_KEY: ${{ secrets.SCRAPER_API_KEY }}
         run: node scraper.js
 
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scraper-artifacts
+          path: ./output/
+
+

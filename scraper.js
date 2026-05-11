@@ -3,6 +3,7 @@ import XLSX from 'xlsx';
 import * as cheerio from 'cheerio';
 import fs from 'fs';
 import { Catbox } from 'node-catbox';
+import FormData from 'form-data';
 
 const DICE_FILTER_OPTIONS = {
     postedDate: ['ONE', 'THREE', 'SEVEN'],
@@ -194,11 +195,11 @@ async function runScraper() {
 
 
     // Crawl theo tung trang
-    for (let i = 1; i <= maxPages; i++) {
+    for (let page = 1; page <= maxPages; i++) {
         const diceUrl = buildDiceUrl({
             query: 'Software Engineer',
             location: 'California',
-            page: i,
+            page,
             filters
         });
 
@@ -218,7 +219,8 @@ async function runScraper() {
                     params: {
                         api_key: process.env.SCRAPER_API_KEY,
                         url: diceUrl,
-                        country_code: 'us'
+                        country_code: 'us',
+                        render: true
                     },
                     timeout: 60000
                 });
@@ -296,7 +298,7 @@ async function runScraper() {
                         employmentType,
                         salary,
                         easyApply,
-                        page: i
+                        page
                     };
 
                     allJobs.push(job);
@@ -317,7 +319,7 @@ async function runScraper() {
        }
 
        await new Promise(resolve =>
-            setTimeout(resolve, 5000)
+            setTimeout(resolve, 30000)
         );
     }
 

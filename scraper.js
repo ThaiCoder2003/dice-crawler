@@ -2,7 +2,6 @@ import axios, { all } from 'axios';
 import XLSX from 'xlsx';
 import * as cheerio from 'cheerio';
 import fs from 'fs';
-import FormData from 'form-data';
 import { createRequire } from 'module';
 import { Catbox } from 'node-catbox';
 
@@ -33,7 +32,7 @@ const filters = {
 }
 
 let existingKeys = new Set();
-    const appScript = "https://script.google.com/macros/s/AKfycbwZyM19-hv2Z9Fz1z4lgnaOftjC4mDsCQrsD9IxTI3ChnjUBmoReELMOhQ8dIqsOHiY/exec";
+    const appScript = "https://script.google.com/macros/s/AKfycbxnxVBqk-kTcm7dbPnT-Lcxjjbz6Fu1km9TpoLoonU-rt6ojftsKeNe7V7yz6Zes5FXLA/exec";
 
 async function uploadToCatbox(filePath) {
     const catbox = new Catbox();
@@ -88,6 +87,7 @@ function buildDiceUrl({
     countryCode = 'US',
     locationPrecision,
     adminDistrictCode,
+    page = 1,
     filters = {}
 }) {
     const baseUrl = 'https://www.dice.com/jobs';
@@ -99,6 +99,7 @@ function buildDiceUrl({
     if (countryCode) params.set('countryCode', countryCode);
     if (locationPrecision) params.set('locationPrecision', locationPrecision);
     if (adminDistrictCode) params.set('adminDistrictCode', adminDistrictCode);
+    if (page != null && page > 1) params.set('page', page);
 
     buildDiceFilters(params, filters);
 
@@ -167,6 +168,204 @@ function buildDiceFilters(params, filters) {
 
 async function runScraper() {
     console.log("🚀 Khởi động Scraper...");
+    let maxPages= 2;
     let allJobs = [];
-    const diceUrl = `https://www.dice.com/jobs?q=artificial+intelligence&location=California&radius=25&fromage=3`;
+
+
+    // Crawl theo tung trang
+    for (let i = 1; i <= maxPages; i++) {
+        const diceUrl = buildDiceUrl({
+            query: 'Software Engineer',
+            location: 'California',
+            page: i,
+            filters
+        });
+
+        let attempts = 0;
+        const maxAttempts = 2;
+
+        while (attempts < maxAttempts) {
+            try {
+                attempts++;
+                console.log(`🔍 Quét trang: ${i} (Lần ${attempts})...`);
+
+                const response = await axios.get('http://api.scraperapi.com', {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                        'Accept-Language': 'en-US,en;q=0.9'
+                    },
+                    params: {
+                        api_key: process.env.SCRAPER_API_KEY,
+                        url: diceUrl,
+                        country_code: 'us'
+                    },
+                    timeout: 60000
+                });
+
+                const $ = cheerio.load(response.data);
+
+                if (!$('[data-testid="job-card"]').length) {
+                    console.log("🚫 Blocked or invalid page");
+                    break;
+                }
+
+                let count = 0;
+
+                $('[data-testid="job-card"]').each((i, el) => {
+                    // Search a with data-testid job-search-job-detail-link
+                    const titleEl = $(el).find('a[data-testid="job-search-job-detail-link"]').first();
+
+                    const title = titleEl.text().trim();
+
+                    const link = titleEl
+                        .attr('href');
+
+                    const jobId = $(el)
+                        .attr('data-job-guid');
+
+                    if (existingKeys.has(jobId)) return;
+
+                    const companyEl = $(el)
+                        .find('a[href*="/company-profile/"] p')
+                        .first();
+
+                    const company = companyEl
+                        .text()
+                        .trim();
+
+                    const content = $(el).find('.content')
+                    let location = 'N/A'
+                    const locationElement = content
+                        .find('.text-zinc-600')
+                        .first();
+
+                    if (locationElement.length) {
+                        location = locationElement.text().trim();
+                    };
+
+                    const description = content
+                        .find('.line-clamp-2.h-10')
+                        .text()
+                        .trim();
+
+                    const employmentType = content
+                        .find('#employmentType-label')
+                        .text()
+                        .trim();
+
+                    const salary = content
+                        .find('#salary-label')
+                        .text()
+                        .trim();
+
+                    const easyApply = $(el)
+                        .find('a[href*="/job-detail/"]')
+                        .filter((_, a) =>
+                            $(a).text().trim().includes('Easy Apply')
+                        )
+                        .length > 0;
+                    
+                    const job = {
+                        id: jobId,
+                        title,
+                        link,
+                        company,
+                        location,
+                        description,
+                        employmentType,
+                        salary,
+                        easyApply,
+                        page: i
+                    };
+
+                    allJobs.push(job);
+                    existingKeys.add(jobId);
+                })
+
+                break;
+            } catch (error) {
+                console.error(`❌ Lỗi khi quét trang ${i} (Lần ${attempts}):`, error.message);
+                if (attempts >= maxAttempts) {
+                    console.error(`❌ Đã đạt số lần thử tối đa cho trang ${i}. Bỏ qua...`);
+                } else {
+                    console.log(`🔄 Thử lại trang ${i}...`);
+                }
+            }
+       }
+    }
+
+    if (allJobs.length > 0) {
+        const fileName = `Dice_Jobs_${new Date().toISOString().slice(0,10)}.xlsx`;
+        const workbook = XLSX.utils.book_new();
+        const refinedData = allJobs.map(job => ({
+            ID: job.id,
+            Title: job.title,
+            Company: job.company,
+            Location: job.location,
+            Salary: job.salary,
+            "Easy Apply": job.easyApply,
+            Description: job.description,
+            "Employment Type": job.employmentType,
+            Link: { f: `HYPERLINK("${job.link.replace(/"/g, '""')}", "Apply")` },
+            Page: job.page
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(refinedData);
+
+        worksheet['!freeze'] = { ySplit: 1 };
+        worksheet['!autofilter'] = {
+            ref: "A1:J1"
+        };
+
+        worksheet['!cols'] = [
+            { wch: 40 }, // ID
+            { wch: 40 }, // Title
+            { wch: 30 }, // Company
+            { wch: 20 }, // Location
+            { wch: 20 }, // Salary
+            { wch: 12 }, // Easy Apply
+            { wch: 80 }, // Description
+            { wch: 20 }, // Employment Type
+            { wch: 50 }, // Link
+            { wch: 10 }  // Page
+        ];
+
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Dice Jobs");
+
+        const summaryData = [
+            ["Dice Job Report"],
+            [""],
+            ["Date", new Date().toLocaleString()],
+            ["Total Jobs", allJobs.length],
+            ["Location", "California, USA"]
+        ];
+
+        const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+        XLSX.utils.book_append_sheet(workbook, summarySheet, "Summary");
+        XLSX.writeFile(workbook, fileName);
+
+        if (!fs.existsSync(fileName)) {
+            throw new Error("XLSX file was not created.");
+        }
+
+        console.log(`📊 Đã lưu ${allJobs.length} jobs vào ${fileName}`);
+
+        const catboxLink = await uploadToCatbox(fileName);
+
+        if (catboxLink) {
+            console.log("✅ Catbox URL:", catboxLink);
+        } else {
+            console.log("❌ Catbox thất bại.");
+        }
+
+        await sendToGoogleSheets(
+            allJobs,
+            catboxLink,
+            allJobs.length
+        )
+
+        console.log("🏁 Hoàn tất!");
+    } else {
+        console.log("❌ Không tìm thấy job nào.");
+    }
 }

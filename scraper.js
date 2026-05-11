@@ -366,3 +366,5 @@ async function runScraper() {
         console.log("❌ Không tìm thấy job nào.");
     }
 }
+
+runScraper();

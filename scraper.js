@@ -230,7 +230,9 @@ async function runScraper() {
                 if (!$('[data-testid="job-card"]').length) {
 
                     console.log("🚫 Blocked or invalid page");
-
+                    if (!fs.existsSync('./output')) {
+                        fs.mkdirSync('./output', { recursive: true });
+                    }
                     fs.writeFileSync(
                         `./output/debug_page_${i}.html`,
                         response.data

@@ -234,11 +234,11 @@ async function runScraper() {
                         fs.mkdirSync('./output', { recursive: true });
                     }
                     fs.writeFileSync(
-                        `./output/debug_page_${i}.html`,
+                        `./output/debug_page_${page}.html`,
                         response.data
                     );
 
-                    console.log(`📝 Saved debug_page_${i}.html`);
+                    console.log(`📝 Saved debug_page_${page}.html`);
 
                     break;
                 }

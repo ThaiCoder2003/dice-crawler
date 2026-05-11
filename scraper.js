@@ -322,7 +322,7 @@ async function runScraper() {
                 if (attempts >= maxAttempts) {
                     console.error(`❌ Đã đạt số lần thử tối đa cho trang ${page}. Bỏ qua...`);
                 } else {
-                    console.log(`🔄 Thử lại trang ${i}...`);
+                    console.log(`🔄 Thử lại trang ${page}...`);
                 }
             }
        }

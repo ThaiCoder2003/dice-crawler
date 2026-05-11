@@ -209,7 +209,7 @@ async function runScraper() {
         while (attempts < maxAttempts) {
             try {
                 attempts++;
-                console.log(`🔍 Quét trang: ${i} (Lần ${attempts})...`);
+                console.log(`🔍 Quét trang: ${page} (Lần ${attempts})...`);
 
                 const response = await axios.get('http://api.scraperapi.com', {
                     headers: {
@@ -309,9 +309,9 @@ async function runScraper() {
 
                 break;
             } catch (error) {
-                console.error(`❌ Lỗi khi quét trang ${i} (Lần ${attempts}):`, error.message);
+                console.error(`❌ Lỗi khi quét trang ${page} (Lần ${attempts}):`, error.message);
                 if (attempts >= maxAttempts) {
-                    console.error(`❌ Đã đạt số lần thử tối đa cho trang ${i}. Bỏ qua...`);
+                    console.error(`❌ Đã đạt số lần thử tối đa cho trang ${page}. Bỏ qua...`);
                 } else {
                     console.log(`🔄 Thử lại trang ${i}...`);
                 }

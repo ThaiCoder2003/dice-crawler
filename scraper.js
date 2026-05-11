@@ -32,13 +32,37 @@ let existingKeys = new Set();
     const appScript = "https://script.google.com/macros/s/AKfycbxnxVBqk-kTcm7dbPnT-Lcxjjbz6Fu1km9TpoLoonU-rt6ojftsKeNe7V7yz6Zes5FXLA/exec";
 
 async function uploadToCatbox(filePath) {
-    const catbox = new Catbox();
     try {
-        const response = await catbox.uploadFile({ path: filePath });
-        console.log("✅ File đã được tải lên Catbox:", response);
-        return response;
+        const form = new FormData();
+
+        form.append("reqtype", "fileupload");
+        form.append(
+            "fileToUpload",
+            fs.createReadStream(filePath)
+        );
+
+        const response = await axios.post(
+            "https://catbox.moe/user/api.php",
+            form,
+            {
+                headers: form.getHeaders(),
+                maxBodyLength: Infinity
+            }
+        );
+
+        console.log(
+            "✅ File đã được tải lên Catbox:",
+            response.data
+        );
+
+        return response.data;
+
     } catch (error) {
-        console.error("❌ Lỗi tải lên Catbox:", error.message);
+        console.error(
+            "❌ Lỗi tải lên Catbox:",
+            error.message
+        );
+
         return null;
     }
 }
@@ -279,6 +303,8 @@ async function runScraper() {
                     existingKeys.add(jobId);
                 })
 
+
+
                 break;
             } catch (error) {
                 console.error(`❌ Lỗi khi quét trang ${i} (Lần ${attempts}):`, error.message);
@@ -289,6 +315,10 @@ async function runScraper() {
                 }
             }
        }
+
+       await new Promise(resolve =>
+            setTimeout(resolve, 5000)
+        );
     }
 
     if (allJobs.length > 0) {

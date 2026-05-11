@@ -228,7 +228,16 @@ async function runScraper() {
                 const $ = cheerio.load(response.data);
 
                 if (!$('[data-testid="job-card"]').length) {
+
                     console.log("🚫 Blocked or invalid page");
+
+                    fs.writeFileSync(
+                        `./output/debug_page_${i}.html`,
+                        response.data
+                    );
+
+                    console.log(`📝 Saved debug_page_${i}.html`);
+
                     break;
                 }
 

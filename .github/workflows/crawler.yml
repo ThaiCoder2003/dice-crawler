@@ -11,14 +11,13 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: 22
 
       - name: Install dependencies
-        run: npm install axios xlsx cheerio node-catbox
+        run: npm install
 
       - name: Run Script
         env:

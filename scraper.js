@@ -2,10 +2,7 @@ import axios, { all } from 'axios';
 import XLSX from 'xlsx';
 import * as cheerio from 'cheerio';
 import fs from 'fs';
-import { createRequire } from 'module';
 import { Catbox } from 'node-catbox';
-
-const require = createRequire(import.meta.url);
 
 const DICE_FILTER_OPTIONS = {
     postedDate: ['ONE', 'THREE', 'SEVEN'],

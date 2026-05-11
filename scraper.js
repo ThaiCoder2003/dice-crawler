@@ -195,7 +195,7 @@ async function runScraper() {
 
 
     // Crawl theo tung trang
-    for (let page = 1; page <= maxPages; i++) {
+    for (let page = 1; page <= maxPages; page++) {
         const diceUrl = buildDiceUrl({
             query: 'Software Engineer',
             location: 'California',

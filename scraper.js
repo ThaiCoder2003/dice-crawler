@@ -2,61 +2,72 @@ import axios, { all } from 'axios';
 import XLSX from 'xlsx';
 import * as cheerio from 'cheerio';
 import fs from 'fs';
-import { Catbox } from 'node-catbox';
+
 import FormData from 'form-data';
 
-const DICE_FILTER_OPTIONS = {
-    postedDate: ['ONE', 'THREE', 'SEVEN'],
-    workplaceTypes: ['On-Site', 'Remote', 'Hybrid'],
-    employmentTypes: [
-        'FULLTIME',
-        'CONTRACT',
-        'PARTTIME',
-        'THIRD_PARTY'
-    ],
-    employerTypes: [
-        'Direct Hire',
-        'Recruiter',
-        'Other'
-    ]
-};
+// This is the filter options you can pick for Dice URL construct. Feel free to fill in the filter JSON below
+// const DICE_FILTER_OPTIONS = {
+//     postedDate: ['ONE', 'THREE', 'SEVEN'],
+//     workplaceTypes: ['On-Site', 'Remote', 'Hybrid'],
+//     employmentTypes: [
+//         'FULLTIME',
+//         'CONTRACT',
+//         'PARTTIME',
+//         'THIRD_PARTY'
+//     ],
+//     employerTypes: [
+//         'Direct Hire',
+//         'Recruiter',
+//         'Other'
+//     ]
+// };
 
 const filters = {
-    easyApply: true,
-    postedDate: 'THREE',
-    workplaceTypes: ['On-Site'],
-    employmentTypes: ['FULLTIME', 'CONTRACT'],
-    employerTypes: ['Direct Hire']
+    // easyApply: false,
+    // workplaceTypes: ['Remote', 'Hybrid'],
+    employmentTypes: ['FULLTIME'],
+    // employerTypes: ['Direct Hire']
 }
 
 let existingKeys = new Set();
     const appScript = "https://script.google.com/macros/s/AKfycbxnxVBqk-kTcm7dbPnT-Lcxjjbz6Fu1km9TpoLoonU-rt6ojftsKeNe7V7yz6Zes5FXLA/exec";
 
-async function uploadToCatbox(filePath) {
+async function uploadToGoFile(filePath) {
     try {
+        const serverRes = await axios.get(
+            'https://api.gofile.io/servers'
+        )
+
+            const server =
+        serverRes.data.data.servers[0].name;
+
+
         const form = new FormData();
 
-        form.append("reqtype", "fileupload");
         form.append(
-            "fileToUpload",
+            'file',
             fs.createReadStream(filePath)
         );
 
-        const response = await axios.post(
-            "https://catbox.moe/user/api.php",
+        const uploadRes = await axios.post(
+            `https://${server}.gofile.io/uploadFile`,
             form,
             {
                 headers: form.getHeaders(),
                 maxBodyLength: Infinity
             }
-        );
+        )
+
+
+        const downloadLink =
+            uploadRes.data.data.downloadPage;
 
         console.log(
-            "✅ File đã được tải lên Catbox:",
-            response.data
+            '✅ Uploaded to GoFile:',
+            downloadLink
         );
 
-        return response.data;
+        return downloadLink;
 
     } catch (error) {
         console.error(
@@ -68,10 +79,10 @@ async function uploadToCatbox(filePath) {
     }
 }
 
-async function sendToGoogleSheets(jobs, catboxLink, totalJobs) {
+async function sendToGoogleSheets(jobs, goFileLink, totalJobs) {
     const payload = { 
         jobs,
-        link: catboxLink,
+        link: goFileLink,
         total: totalJobs
     };
 
@@ -193,6 +204,8 @@ async function runScraper() {
     let maxPages= 2;
     let allJobs = [];
 
+    let isLastPage = false
+    let previousFirstJobId = null;
 
     // Crawl theo tung trang
     for (let page = 1; page <= maxPages; page++) {
@@ -220,30 +233,54 @@ async function runScraper() {
                         api_key: process.env.SCRAPER_API_KEY,
                         url: diceUrl,
                         country_code: 'us',
-                        render: true
                     },
                     timeout: 60000
                 });
 
                 const $ = cheerio.load(response.data);
 
-                if (!$('[data-testid="job-card"]').length) {
+                const jobCards = $('[data-testid="job-card"]');
 
-                    console.log("🚫 Blocked or invalid page");
-                    if (!fs.existsSync('./output')) {
+                if (!jobCards.length) {
+
+                    const bodyText = $('body').text();
+                    const normalizedBody = bodyText.toLowerCase();
+                    // Truly blocked
+                    if (
+                        normalizedBody.includes('access denied') ||
+                        normalizedBody.includes('captcha') ||
+                        normalizedBody.includes('temporarily blocked') ||
+                        normalizedBody.includes('verify you are human')
+                    ) {
+                        console.log(`🚫 Actually blocked on page ${page}`);
+
                         fs.mkdirSync('./output', { recursive: true });
+
+                        fs.writeFileSync(
+                            `./output/debug_blocked_page_${page}.html`,
+                            response.data
+                        );
+
+                        break;
                     }
-                    fs.writeFileSync(
-                        `./output/debug_page_${page}.html`,
-                        response.data
-                    );
 
-                    console.log(`📝 Saved debug_page_${page}.html`);
+                    isLastPage = true;
 
+                    // No more jobs
+                    console.log(`✅ No more jobs found on page ${page}`);
+                    break;
+                }
+                // End quickly here
+
+                const firstJobId = jobCards.first().attr('data-job-guid');
+
+                if (firstJobId && firstJobId === previousFirstJobId) {
+                    console.log("⚠️ Duplicate page detected. Stopping.");
+                    isLastPage = true;
                     break;
                 }
 
-                let count = 0;
+                previousFirstJobId = firstJobId;
 
                 $('[data-testid="job-card"]').each((i, el) => {
                     // Search a with data-testid job-search-job-detail-link
@@ -256,6 +293,8 @@ async function runScraper() {
 
                     const jobId = $(el)
                         .attr('data-job-guid');
+
+                    if (!jobId) return;
 
                     if (existingKeys.has(jobId)) return;
 
@@ -329,8 +368,14 @@ async function runScraper() {
             }
        }
 
+       if (isLastPage) {
+            console.log("🛑 Stopping crawl early.");
+            break;
+        }
+
+
        await new Promise(resolve =>
-            setTimeout(resolve, 30000)
+            setTimeout(resolve, 5000)
         );
     }
 
@@ -346,7 +391,7 @@ async function runScraper() {
             "Easy Apply": job.easyApply,
             Description: job.description,
             "Employment Type": job.employmentType,
-            Link: { f: `HYPERLINK("${job.link.replace(/"/g, '""')}", "Apply")` },
+            Link: { f: `HYPERLINK("${(job.link || "").replace(/"/g, '""')}", "Apply")` },
             Page: job.page
         }));
 
@@ -390,17 +435,17 @@ async function runScraper() {
 
         console.log(`📊 Đã lưu ${allJobs.length} jobs vào ${fileName}`);
 
-        const catboxLink = await uploadToCatbox(fileName);
+        const goFileLink = await uploadToGoFile(fileName);
 
-        if (catboxLink) {
-            console.log("✅ Catbox URL:", catboxLink);
+        if (goFileLink) {
+            console.log("✅ Catbox URL:", goFileLink);
         } else {
             console.log("❌ Catbox thất bại.");
         }
 
         await sendToGoogleSheets(
             allJobs,
-            catboxLink,
+            goFileLink,
             allJobs.length
         )
 

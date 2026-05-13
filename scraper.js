@@ -32,7 +32,7 @@ const filters = {
 }
 
 let existingKeys = new Set();
-    const appScript = "https://script.google.com/macros/s/AKfycbwSYQ-BC8G8dvteTA4OATYPQavecRxeH4D0Ps65MDW3n9JnFzPnnAyp01seg-pSEjePHQ/exec";
+const appScript = "https://script.google.com/macros/s/AKfycbzcfcygENe885ZtHuRHiUg_fpLQV-qEM1O67bYo_wHeJjEOx3O1jb0r0dbDiE8It2O78A/exec";
 
 async function uploadToGoFile(filePath) {
     try {
@@ -226,7 +226,7 @@ async function runScraper() {
             while (attempts < maxAttempts) {
                 try {
                     attempts++;
-                    console.log(`🔍 Quét trang: ${page} (Lần ${attempts})...`);
+                    console.log(`🔍[${selected}] Quét trang: ${page} (Lần ${attempts})...`);
 
                     const response = await axios.get('http://api.scraperapi.com', {
                         headers: {

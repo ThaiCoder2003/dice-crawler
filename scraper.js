@@ -3,7 +3,6 @@ import XLSX from 'xlsx';
 import * as cheerio from 'cheerio';
 import fs from 'fs';
 
-import FormData from 'form-data';
 
 // This is the filter options you can pick for Dice URL construct. Feel free to fill in the filter JSON below
 // const DICE_FILTER_OPTIONS = {
@@ -34,58 +33,9 @@ const filters = {
 let existingKeys = new Set();
 const appScript = "https://script.google.com/macros/s/AKfycbzcfcygENe885ZtHuRHiUg_fpLQV-qEM1O67bYo_wHeJjEOx3O1jb0r0dbDiE8It2O78A/exec";
 
-async function uploadToGoFile(filePath) {
-    try {
-        const serverRes = await axios.get(
-            'https://api.gofile.io/servers'
-        )
-
-            const server =
-        serverRes.data.data.servers[0].name;
-
-
-        const form = new FormData();
-
-        form.append(
-            'file',
-            fs.createReadStream(filePath)
-        );
-
-        const uploadRes = await axios.post(
-            `https://${server}.gofile.io/uploadFile`,
-            form,
-            {
-                headers: form.getHeaders(),
-                maxBodyLength: Infinity
-            }
-        )
-
-
-        const downloadLink =
-            uploadRes.data.data.downloadPage;
-
-        console.log(
-            '✅ Uploaded to GoFile:',
-            downloadLink
-        );
-
-        return downloadLink;
-
-    } catch (error) {
-        console.error(
-            "❌ Lỗi tải lên Catbox:",
-            error.message
-        );
-
-        return null;
-    }
-}
-
-async function sendToGoogleSheets(jobs, goFileLink, totalJobs) {
+async function sendToGoogleSheets(jobs) {
     const payload = { 
         jobs,
-        link: goFileLink,
-        total: totalJobs
     };
 
     try {
@@ -391,83 +341,8 @@ async function runScraper() {
     }
 
     if (allJobs.length > 0) {
-        const fileName = `Dice_Jobs_${new Date().toISOString().slice(0,10)}.xlsx`;
-        const workbook = XLSX.utils.book_new();
-        const refinedData = allJobs.map(job => ({
-            ID: job.id,
-            Title: job.title,
-            Company: job.company,
-            Location: job.location,
-            Salary: job.salary,
-            "Easy Apply": job.easyApply,
-            Description: job.description,
-            "Employment Type": job.employmentType,
-            Link: { f: `HYPERLINK("${(job.link || "").replace(/"/g, '""')}", "Apply")` },
-            Page: job.page,
-            Query: job.query
-        }));
-
-        for (const selected of queries) {
-            const jobsForQuery = refinedData.filter(j => j.Query === selected);
-            if (jobsForQuery.length === 0) continue;
-            const worksheet = XLSX.utils.json_to_sheet(jobsForQuery);
-
-            worksheet['!freeze'] = { ySplit: 1 };
-            worksheet['!autofilter'] = {
-                ref: "A1:K1"
-            };
-
-            worksheet['!cols'] = [
-                { wch: 40 }, // ID
-                { wch: 40 }, // Title
-                { wch: 30 }, // Company
-                { wch: 20 }, // Location
-                { wch: 20 }, // Salary
-                { wch: 12 }, // Easy Apply
-                { wch: 80 }, // Description
-                { wch: 20 }, // Employment Type
-                { wch: 50 }, // Link
-                { wch: 10 }, // Page
-                { wch: 20 }, // Query
-            ];
-
-            const safeSheetName = selected
-                .replace(/[:\\/?*\[\]]/g, '')
-                .slice(0, 31);
-
-            XLSX.utils.book_append_sheet(workbook, worksheet, safeSheetName);
-        }
-
-        const summaryData = [
-            ["Dice Job Report"],
-            [""],
-            ["Date", new Date().toLocaleString()],
-            ["Total Jobs", allJobs.length],
-            ["Location", "California, USA"]
-        ];
-
-        const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-        XLSX.utils.book_append_sheet(workbook, summarySheet, "Summary");
-        XLSX.writeFile(workbook, fileName);
-
-        if (!fs.existsSync(fileName)) {
-            throw new Error("XLSX file was not created.");
-        }
-
-        console.log(`📊 Đã lưu ${allJobs.length} jobs vào ${fileName}`);
-
-        const goFileLink = await uploadToGoFile(fileName);
-
-        if (goFileLink) {
-            console.log("✅ GoFile URL:", goFileLink);
-        } else {
-            console.log("❌ GoFile thất bại.");
-        }
-
         await sendToGoogleSheets(
             allJobs,
-            goFileLink,
-            allJobs.length
         )
 
         console.log("🏁 Hoàn tất!");

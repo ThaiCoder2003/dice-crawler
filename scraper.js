@@ -31,7 +31,7 @@ const filters = {
 }
 
 let existingKeys = new Set();
-const appScript = "https://script.google.com/macros/s/AKfycbyIfOaNX3JhoEV8pUTbTui2DWoHXyAnvz0O9cdnPN6yjEGg2rpRMJnlY9Wpu8at3nJV6Q/exec";
+const appScript = "https://script.google.com/macros/s/AKfycbxbKUnLH2LB5fYE6NPK11Gyl4XmPOEEe94t-Jo-xLE6rIFOBqeablIi7WhXAJeW3afM4Q/exec";
 
 async function sendToGoogleSheets(jobs) {
     const payload = { 

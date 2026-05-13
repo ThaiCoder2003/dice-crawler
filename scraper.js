@@ -22,6 +22,8 @@ import FormData from 'form-data';
 //     ]
 // };
 
+const queries = ["Artificial Intelligence", "Data", "Finance", "Investment", "Machine Learning", "Management"];
+
 const filters = {
     // easyApply: false,
     // workplaceTypes: ['Remote', 'Hybrid'],
@@ -30,7 +32,7 @@ const filters = {
 }
 
 let existingKeys = new Set();
-    const appScript = "https://script.google.com/macros/s/AKfycbxnxVBqk-kTcm7dbPnT-Lcxjjbz6Fu1km9TpoLoonU-rt6ojftsKeNe7V7yz6Zes5FXLA/exec";
+    const appScript = "https://script.google.com/macros/s/AKfycbwSYQ-BC8G8dvteTA4OATYPQavecRxeH4D0Ps65MDW3n9JnFzPnnAyp01seg-pSEjePHQ/exec";
 
 async function uploadToGoFile(filePath) {
     try {
@@ -201,182 +203,191 @@ function buildDiceFilters(params, filters) {
 
 async function runScraper() {
     console.log("🚀 Khởi động Scraper...");
-    let maxPages= 2;
+    let maxPages= 1;
     let allJobs = [];
 
-    let isLastPage = false
-    let previousFirstJobId = null;
+    for (const selected of queries) {
+    let newJobsForThisQuery = [];
 
+        let isLastPage = false
+        let previousFirstJobId = null;
     // Crawl theo tung trang
-    for (let page = 1; page <= maxPages; page++) {
-        const diceUrl = buildDiceUrl({
-            query: 'Software Engineer',
-            location: 'California',
-            page,
-            filters
-        });
+        for (let page = 1; page <= maxPages; page++) {
+            const diceUrl = buildDiceUrl({
+                query: selected,
+                location: 'California',
+                page,
+                filters
+            });
 
-        let attempts = 0;
-        const maxAttempts = 2;
+            let attempts = 0;
+            const maxAttempts = 2;
 
-        while (attempts < maxAttempts) {
-            try {
-                attempts++;
-                console.log(`🔍 Quét trang: ${page} (Lần ${attempts})...`);
+            while (attempts < maxAttempts) {
+                try {
+                    attempts++;
+                    console.log(`🔍 Quét trang: ${page} (Lần ${attempts})...`);
 
-                const response = await axios.get('http://api.scraperapi.com', {
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                        'Accept-Language': 'en-US,en;q=0.9'
-                    },
-                    params: {
-                        api_key: process.env.SCRAPER_API_KEY,
-                        url: diceUrl,
-                        country_code: 'us',
-                    },
-                    timeout: 60000
-                });
+                    const response = await axios.get('http://api.scraperapi.com', {
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                            'Accept-Language': 'en-US,en;q=0.9'
+                        },
+                        params: {
+                            api_key: process.env.SCRAPER_API_KEY,
+                            url: diceUrl,
+                            country_code: 'us',
+                        },
+                        timeout: 60000
+                    });
 
-                const $ = cheerio.load(response.data);
+                    const $ = cheerio.load(response.data);
 
-                const jobCards = $('[data-testid="job-card"]');
+                    const jobCards = $('[data-testid="job-card"]');
 
-                if (!jobCards.length) {
+                    if (!jobCards.length) {
 
-                    const bodyText = $('body').text();
-                    const normalizedBody = bodyText.toLowerCase();
-                    // Truly blocked
-                    if (
-                        normalizedBody.includes('access denied') ||
-                        normalizedBody.includes('captcha') ||
-                        normalizedBody.includes('temporarily blocked') ||
-                        normalizedBody.includes('verify you are human')
-                    ) {
-                        console.log(`🚫 Actually blocked on page ${page}`);
+                        const bodyText = $('body').text();
+                        const normalizedBody = bodyText.toLowerCase();
+                        // Truly blocked
+                        if (
+                            normalizedBody.includes('access denied') ||
+                            normalizedBody.includes('captcha') ||
+                            normalizedBody.includes('temporarily blocked') ||
+                            normalizedBody.includes('verify you are human') ||
+                            normalizedBody.includes('checking your browser') ||
+                            normalizedBody.includes('just a moment') ||
+                            normalizedBody.includes('cloudflare') 
+                        ) {
+                            console.log(`🚫 Actually blocked on page ${page}`);
 
-                        fs.mkdirSync('./output', { recursive: true });
+                            fs.mkdirSync('./output', { recursive: true });
 
-                        fs.writeFileSync(
-                            `./output/debug_blocked_page_${page}.html`,
-                            response.data
-                        );
+                            fs.writeFileSync(
+                                `./output/debug_blocked_page_${page}.html`,
+                                response.data
+                            );
 
+                            break;
+                        }
+
+                        isLastPage = true;
+
+                        // No more jobs
+                        console.log(`✅ No more jobs found on page ${page}`);
+                        break;
+                    }
+                    // End quickly here
+
+                    const firstJobId = jobCards.first().attr('data-job-guid');
+
+                    if (firstJobId && firstJobId === previousFirstJobId) {
+                        console.log("⚠️ Duplicate page detected. Stopping.");
+                        isLastPage = true;
                         break;
                     }
 
-                    isLastPage = true;
+                    previousFirstJobId = firstJobId;
 
-                    // No more jobs
-                    console.log(`✅ No more jobs found on page ${page}`);
+                    $('[data-testid="job-card"]').each((i, el) => {
+                        // Search a with data-testid job-search-job-detail-link
+                        const titleEl = $(el).find('a[data-testid="job-search-job-detail-link"]').first();
+
+                        const title = titleEl.text().trim();
+
+                        const link = titleEl
+                            .attr('href');
+
+                        const jobId = $(el)
+                            .attr('data-job-guid');
+
+                        if (!jobId) return;
+
+                        if (existingKeys.has(jobId)) return;
+
+                        const companyEl = $(el)
+                            .find('a[href*="/company-profile/"] p')
+                            .first();
+
+                        const company = companyEl
+                            .text()
+                            .trim();
+
+                        const content = $(el).find('.content')
+                        let location = 'N/A'
+                        const locationElement = content
+                            .find('.text-zinc-600')
+                            .first();
+
+                        if (locationElement.length) {
+                            location = locationElement.text().trim();
+                        };
+
+                        const description = content
+                            .find('.line-clamp-2.h-10')
+                            .text()
+                            .trim();
+
+                        const employmentType = content
+                            .find('#employmentType-label')
+                            .text()
+                            .trim();
+
+                        const salary = content
+                            .find('#salary-label')
+                            .text()
+                            .trim();
+
+                        const easyApply = $(el)
+                            .find('a[href*="/job-detail/"]')
+                            .filter((_, a) =>
+                                $(a).text().trim().includes('Easy Apply')
+                            )
+                            .length > 0;
+                        
+                        const job = {
+                            id: jobId,
+                            title,
+                            link,
+                            company,
+                            location,
+                            description,
+                            employmentType,
+                            salary,
+                            easyApply,
+                            page,
+                            query: selected
+                        };
+
+                        newJobsForThisQuery.push(job);
+                        existingKeys.add(jobId);
+                    })
+
                     break;
-                }
-                // End quickly here
-
-                const firstJobId = jobCards.first().attr('data-job-guid');
-
-                if (firstJobId && firstJobId === previousFirstJobId) {
-                    console.log("⚠️ Duplicate page detected. Stopping.");
-                    isLastPage = true;
-                    break;
-                }
-
-                previousFirstJobId = firstJobId;
-
-                $('[data-testid="job-card"]').each((i, el) => {
-                    // Search a with data-testid job-search-job-detail-link
-                    const titleEl = $(el).find('a[data-testid="job-search-job-detail-link"]').first();
-
-                    const title = titleEl.text().trim();
-
-                    const link = titleEl
-                        .attr('href');
-
-                    const jobId = $(el)
-                        .attr('data-job-guid');
-
-                    if (!jobId) return;
-
-                    if (existingKeys.has(jobId)) return;
-
-                    const companyEl = $(el)
-                        .find('a[href*="/company-profile/"] p')
-                        .first();
-
-                    const company = companyEl
-                        .text()
-                        .trim();
-
-                    const content = $(el).find('.content')
-                    let location = 'N/A'
-                    const locationElement = content
-                        .find('.text-zinc-600')
-                        .first();
-
-                    if (locationElement.length) {
-                        location = locationElement.text().trim();
-                    };
-
-                    const description = content
-                        .find('.line-clamp-2.h-10')
-                        .text()
-                        .trim();
-
-                    const employmentType = content
-                        .find('#employmentType-label')
-                        .text()
-                        .trim();
-
-                    const salary = content
-                        .find('#salary-label')
-                        .text()
-                        .trim();
-
-                    const easyApply = $(el)
-                        .find('a[href*="/job-detail/"]')
-                        .filter((_, a) =>
-                            $(a).text().trim().includes('Easy Apply')
-                        )
-                        .length > 0;
-                    
-                    const job = {
-                        id: jobId,
-                        title,
-                        link,
-                        company,
-                        location,
-                        description,
-                        employmentType,
-                        salary,
-                        easyApply,
-                        page
-                    };
-
-                    allJobs.push(job);
-                    existingKeys.add(jobId);
-                })
-
-
-
-                break;
-            } catch (error) {
-                console.error(`❌ Lỗi khi quét trang ${page} (Lần ${attempts}):`, error.message);
-                if (attempts >= maxAttempts) {
-                    console.error(`❌ Đã đạt số lần thử tối đa cho trang ${page}. Bỏ qua...`);
-                } else {
-                    console.log(`🔄 Thử lại trang ${page}...`);
+                } catch (error) {
+                    console.error(`❌ Lỗi khi quét trang ${page} (Lần ${attempts}):`, error.message);
+                    if (attempts >= maxAttempts) {
+                        console.error(`❌ Đã đạt số lần thử tối đa cho trang ${page}. Bỏ qua...`);
+                    } else {
+                        console.log(`🔄 Thử lại trang ${page}...`);
+                    }
                 }
             }
-       }
 
-       if (isLastPage) {
-            console.log("🛑 Stopping crawl early.");
-            break;
+            if (newJobsForThisQuery.length > 0) {
+                console.log(`✅ Query "${selected}" có ${newJobsForThisQuery.length} job mới.`);
+                allJobs = allJobs.concat(newJobsForThisQuery);
+            }
+
+            if (isLastPage) {
+                console.log("🛑 Stopping crawl early.");
+                break;
+            }
+
+            await new Promise(resolve =>
+                setTimeout(resolve, 5000)
+            );
         }
-
-
-       await new Promise(resolve =>
-            setTimeout(resolve, 5000)
-        );
     }
 
     if (allJobs.length > 0) {
@@ -392,30 +403,40 @@ async function runScraper() {
             Description: job.description,
             "Employment Type": job.employmentType,
             Link: { f: `HYPERLINK("${(job.link || "").replace(/"/g, '""')}", "Apply")` },
-            Page: job.page
+            Page: job.page,
+            Query: job.query
         }));
 
-        const worksheet = XLSX.utils.json_to_sheet(refinedData);
+        for (const selected of queries) {
+            const jobsForQuery = refinedData.filter(j => j.Query === selected);
+            if (jobsForQuery.length === 0) continue;
+            const worksheet = XLSX.utils.json_to_sheet(jobsForQuery);
 
-        worksheet['!freeze'] = { ySplit: 1 };
-        worksheet['!autofilter'] = {
-            ref: "A1:J1"
-        };
+            worksheet['!freeze'] = { ySplit: 1 };
+            worksheet['!autofilter'] = {
+                ref: "A1:K1"
+            };
 
-        worksheet['!cols'] = [
-            { wch: 40 }, // ID
-            { wch: 40 }, // Title
-            { wch: 30 }, // Company
-            { wch: 20 }, // Location
-            { wch: 20 }, // Salary
-            { wch: 12 }, // Easy Apply
-            { wch: 80 }, // Description
-            { wch: 20 }, // Employment Type
-            { wch: 50 }, // Link
-            { wch: 10 }  // Page
-        ];
+            worksheet['!cols'] = [
+                { wch: 40 }, // ID
+                { wch: 40 }, // Title
+                { wch: 30 }, // Company
+                { wch: 20 }, // Location
+                { wch: 20 }, // Salary
+                { wch: 12 }, // Easy Apply
+                { wch: 80 }, // Description
+                { wch: 20 }, // Employment Type
+                { wch: 50 }, // Link
+                { wch: 10 }, // Page
+                { wch: 20 }, // Query
+            ];
 
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Dice Jobs");
+            const safeSheetName = selected
+                .replace(/[:\\/?*\[\]]/g, '')
+                .slice(0, 31);
+
+            XLSX.utils.book_append_sheet(workbook, worksheet, safeSheetName);
+        }
 
         const summaryData = [
             ["Dice Job Report"],
@@ -438,9 +459,9 @@ async function runScraper() {
         const goFileLink = await uploadToGoFile(fileName);
 
         if (goFileLink) {
-            console.log("✅ Catbox URL:", goFileLink);
+            console.log("✅ GoFile URL:", goFileLink);
         } else {
-            console.log("❌ Catbox thất bại.");
+            console.log("❌ GoFile thất bại.");
         }
 
         await sendToGoogleSheets(
